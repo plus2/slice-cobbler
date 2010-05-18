@@ -1,0 +1,13 @@
+auto lo
+iface lo inet loopback
+
+auto eth0
+iface eth0 inet static
+    address <%= @node.public_ip %>
+    netmask <%= @node.network.public.netmask %>
+    gateway <%= @node.network.public.gateway %>
+
+auto eth0:0
+iface eth0:0 inet static
+    address <%= @node.private_ip %>
+    netmask <%= @node.network.private.netmask %>

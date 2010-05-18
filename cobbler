@@ -1,0 +1,283 @@
+#!/usr/bin/env ruby
+
+require 'rubygems'
+require 'thor'
+require 'tempfile'
+require 'pathname'
+
+require 'angry_hash'
+require 'yajl'
+
+module SSH
+  def ssh(cmd="")
+    setup_ssh!
+
+    ssh_cmd = %{ssh -S #{ssh_socket} #{ssh_name} '#{cmd}'}
+
+    sh "ssh #{cmd}", ssh_cmd
+  end
+
+  def scp(data,to)
+    setup_ssh!
+
+    if Pathname === data
+      desc = path = data.to_s
+    else
+      tmp = Tempfile.new('cobbler')
+      tmp << data
+      tmp.flush
+
+      desc = '[data]'
+      path = tmp.path
+    end
+
+    scp_cmd = "scp -o ControlPath=#{ssh_socket} #{path} #{ssh_name}:#{to}"
+
+    sh "scp #{desc} -> #{to}", scp_cmd
+  end
+
+  def rsync(from,to)
+    setup_ssh!
+
+    from = "#{from}/"
+    to = "#{ssh_name}:#{to}/"
+
+    sh "rsync #{from} #{to}", "rsync -avz -e 'ssh -S #{ssh_socket}' --rsync-path='sudo -H rsync' --delete --exclude=.git --exclude='.*.sw?' #{from} #{to}"
+  end
+    
+
+  def sh(tag,cmd)
+    say_prompt
+    say tag, :blue, true
+    system(cmd)
+    $?.success? or raise "#{tag} failed"
+  end
+
+  def ssh_socket
+    @ssh_socket ||= Pathname("~/.ssh/#{$$}-cobble.sock").expand_path
+  end
+
+  def setup_ssh!
+    unless running?
+      system("ssh -S #{ssh_socket} -MNf #{ssh_name}")
+    end
+  end
+
+  def running?
+    system("ssh -O check -S #{ssh_socket} localhost 2>&1")
+    $?.success?
+  end
+
+  at_exit {
+    socket = "~/.ssh/#{$$}-cobble.sock"
+    system "ssh -S #{socket} -O exit localhost"
+    system "rm -f #{socket}"
+  }
+end
+
+class Cobbler < Thor
+  include Thor::Actions
+  include ::SSH
+
+  attr_reader :config, :server
+
+  class_option :config, :type => :string, :required => false
+  argument :nodename, :type => :string, :desc => "The nodename"
+
+  def initialize(*)
+    super
+    read_config
+  end
+
+  desc "ssh_key", "Sync up an ssh key"
+  def ssh_key
+    ssh "mkdir -p ~/.ssh; chmod 0700 ~/.ssh"
+    scp config.ssh_key, ".ssh/authorized_keys"
+    ssh "chmod 0600 ~/.ssh/authorized_keys"
+  end
+
+  desc "ssh_to", "Ssh to the node" 
+  def ssh_to
+    ssh
+  end
+  
+
+  # bootstrapping
+
+  # Bootstrap the slice as described above.
+  desc :bootstrap, "bootstrap the slice using the cobble mob"
+  method_options :dry_run => :boolean, :ruby => :boolean
+  def bootstrap
+    if options.ruby?
+      bootstrap_ruby
+    end
+
+    fetch_libs
+    rsync_libs
+    mob('bootstrap')
+  end
+
+
+  protected
+
+  # Sets the angry mob to bootstrapping.
+  def mob(act)
+    Pathname("./bootstrap_dna.json").open('w') {|f| f << server.to_json}
+
+    json_file = home+"bootstrap_dna.json"
+    scp Yajl::Encoder.encode(server), json_file
+
+
+    ssh "cd #{home+'angry_mob'} && #{sudo} /usr/local/bin/ruby bin/mob #{"--dry-run" if options.dry_run} --nodename #{server.nodename} " \
+    "--mob #{home+'common_mob'} --mob #{home+'cobble_mob'} --json-file #{json_file} --act #{act}"
+  end
+
+
+
+  ##### part 1
+  # install REE
+  def bootstrap_ruby
+    scp root+'cobble.sh', 'cobble.sh'
+    ssh "#{sudo} bash cobble.sh"
+  end
+
+  # Freshen up the bootstrap mobs on the target.
+  def rsync_libs
+    # for the moment we're just rsync-ing angry_mob ... eventually we'll install the gem
+    rsync vendor+"angry_mob",  home+"angry_mob"
+    rsync vendor+"common_mob", home+"common_mob"
+    rsync "./cobble_mob", home+"cobble_mob"
+  end
+
+  def fetch_libs
+    vendor.mkpath
+    fetch_lib('angry_mob','git@github.com:plus2/angry_mob.git')
+    fetch_lib('common_mob','git@github.com:plus2/common_mob.git')
+  end
+
+  def fetch_lib(name,repo)
+    path = vendor+name
+    exists = false
+    if path.exist?
+      inside(path) { system( "git rev-parse --is-inside-work-tree" ) }
+      exists = $?.success?
+    end
+
+    if exists
+      say "updating #{repo} to #{path}", :blue
+      inside(path) { run "git pull" }
+    else
+      say "cloning #{repo} to #{path}", :blue
+      run "git clone #{repo} #{path}"
+    end
+  end
+
+
+
+
+  # angry mob
+  public
+
+  desc :am, "Sync and run angry mob"
+  def am
+    update_am
+    server_mob('plus2/basics')
+  end
+
+  desc :dump_am_json, "dump am json"
+  def dump_am_json
+    sdna = ServerDna.platform_dna.generate
+    Pathname('./server_dna.json').open('w') {|f| f << Yajl::Encoder.encode(sdna)}
+  end
+
+
+  protected
+  def update_am
+    local_home  = Pathname("/Users/lachie/dev/plus2")
+    remote_home = Pathname("/usr/local/plus2")
+
+    {
+      "angry_mob"       => "lib/angry_mob",
+      "common_mob"      => "mobs/common_mob",
+      "plus2mob"        => "mobs/plus2mob"
+    }.each do |from,to|
+      rsync local_home+from, remote_home+to
+    end
+  end
+
+  # Sets the angry mob to setting up. Assumes that the slice is already bootstrapped.
+  def server_mob(act)
+    sdna = ServerDna.platform_dna.generate
+
+    json_file = home+"server_dna.json"
+    scp Yajl::Encoder.encode(sdna), json_file
+
+    p2home = '/usr/local/plus2'
+    am = p2home+'/lib/angry_mob'
+
+    dry_run = options.dry_run ? "--dry-run" : ''
+
+    ssh "#{sudo} /usr/local/bin/ruby #{am}/bin/mob #{dry_run} --nodename #{nodename} " \
+        "--mob #{p2home}/mobs/common_mob --mob #{p2home}/mobs/plus2mob --json-file #{json_file} --act #{act}"
+  end
+
+
+
+  protected
+  def root
+    @root ||= Pathname(__FILE__).expand_path.dirname
+  end
+
+  def vendor
+    root+'vendor'
+  end
+
+  def read_config
+    unless config_file.exist?
+      raise "Couldn't find config file.
+To fix, either
+  * use the --config-file=yourconfig.json switch
+  * set the environment variable COBBLER_CONFIG to youconfig.json
+  * setup #{root+'config.json'}
+      "
+    end
+    @config = AngryHash[ Yajl::Parser.parse( config_file.read ) ]
+    @server = @config.servers[nodename]
+  end
+
+  def config_file
+    @config_file ||= Pathname(config_file!)
+  end
+
+  def config_file!
+    options.config || ENV['COBBLER_CONFIG'] || (root+'config.json')
+  end
+
+  def sudo
+    if server.admin_user != 'root'
+      "sudo -H "
+    else
+      ''
+    end
+  end
+
+  def ssh_name
+    "#{server.admin_user}@#{server.ip}"
+  end
+
+  def home
+    Pathname(server.admin_home)
+  end
+
+  def say_prompt
+    say "#{nodename} > "
+  end
+
+
+
+  #def ssh_master
+  #  system "ssh #{options.name} -M -S /tmp/cobbler-master"
+  #end
+end
+
+Cobbler.start

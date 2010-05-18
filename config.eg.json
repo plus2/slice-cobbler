@@ -1,0 +1,14 @@
+{
+  "ssh_key": "ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEA2xSDo4l6zkrv5YHcLKm1K3WFNvOXmiuEDeN8NOMAaVhum558XPKF2jTVjhLV97QCkxLoTwOXpojRWgtwTkGLFEwhaptIfsrpKE4U58ZcxLVHrBXkyepB8rrUSlnedE2rAry3Cnn00lbv32V3YCkyegGWTStiAgQzMUEdQ+7AzA6+J6L2omA3jHV8rojTy810eNMfF3UMbJYeMLgwPYOOFKViSkxYmR9PVTCaxD2zfFPwpDWXEC+txWYjNxps/GYy0onVGckk8hw/6botigbiDSy624dxclkR9WS6hZSDxmozSakZvtDbzQQHiAVC+OAFUZzFuRjaFCxBVA+9LUqcwQ== lachie@rincewind.local",
+  "github": {
+    "api_token": "",
+    "user": ""
+  },
+  "servers": {
+    "newt": {
+      "ip": "192.168.0.13",
+      "admin_user": "root",
+      "admin_home": "/root"
+    }
+  }
+}

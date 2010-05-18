@@ -1,0 +1,6 @@
+.DS_Store
+.*.sw?
+cap_secure.rb
+config.json
+bootstrap_dna.json
+vendor/*
