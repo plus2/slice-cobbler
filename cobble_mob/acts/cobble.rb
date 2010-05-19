@@ -23,7 +23,7 @@ end
 # On Linode we need to configure our own private IPs.
 # This is a bit of a pain, but here we use the API to make it bearable.
 act 'configure-ips' do
-  if node.provider.name == 'linode' && !node.private_ip.blank?
+  if node.provider? && node.provider.name == 'linode' && !node.private_ip.blank?
     # Man, we really have to reboot.
     #
     # This means that you have to wait for the reboot, then re-cobble.

@@ -1,12 +1,25 @@
 #!/usr/bin/env ruby
+#
 
-require 'rubygems'
-require 'thor'
+require "rubygems"
+require "bundler"
+Bundler.setup
+
 require 'tempfile'
 require 'pathname'
+require 'pp'
 
+require 'thor'
 require 'angry_hash'
 require 'yajl'
+
+class Object
+  def tapp(tag=nil)
+    print "#{tag}=" if tag
+    pp self
+    self
+  end
+end
 
 module SSH
   def ssh(cmd="")
@@ -122,10 +135,8 @@ class Cobbler < Thor
 
   # Sets the angry mob to bootstrapping.
   def mob(act)
-    Pathname("./bootstrap_dna.json").open('w') {|f| f << server.to_json}
-
     json_file = home+"bootstrap_dna.json"
-    scp Yajl::Encoder.encode(server), json_file
+    scp config_file, json_file
 
 
     ssh "cd #{home+'angry_mob'} && #{sudo} /usr/local/bin/ruby bin/mob #{"--dry-run" if options.dry_run} --nodename #{server.nodename} " \
@@ -241,7 +252,7 @@ To fix, either
   * setup #{root+'config.json'}
       "
     end
-    @config = AngryHash[ Yajl::Parser.parse( config_file.read ) ]
+    @config = AngryHash[ Yajl::Parser.parse( config_file.read ) ].tapp
     @server = @config.servers[nodename]
   end
 
