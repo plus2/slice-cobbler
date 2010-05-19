@@ -119,12 +119,9 @@ class Cobbler < Thor
 
   # Bootstrap the slice as described above.
   desc :bootstrap, "bootstrap the slice using the cobble mob"
-  method_options :dry_run => :boolean, :ruby => :boolean
+  method_options :dry_run => :boolean, :ruby => :boolean, :update_libs => :boolean
   def bootstrap
-    if options.ruby?
-      bootstrap_ruby
-    end
-
+    bootstrap_ruby
     fetch_libs
     rsync_libs
     mob('bootstrap')
@@ -148,6 +145,7 @@ class Cobbler < Thor
   ##### part 1
   # install REE
   def bootstrap_ruby
+    return unless options.ruby?
     scp root+'cobble.sh', 'cobble.sh'
     ssh "#{sudo} bash cobble.sh"
   end
@@ -175,8 +173,11 @@ class Cobbler < Thor
     end
 
     if exists
-      say "updating #{repo} to #{path}", :blue
-      inside(path) { run "git pull" }
+      if options.update_libs?
+        say "updating #{repo} to #{path}", :blue
+        inside(path) { run "git pull" }
+      end
+
     else
       say "cloning #{repo} to #{path}", :blue
       run "git clone #{repo} #{path}"
