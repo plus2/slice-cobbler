@@ -9,6 +9,14 @@ setup_node do |node,defaults|
 
   # Our little home on every slice
   node.root = "/usr/local/plus2".pathname
+
+  node.host = node.servers[node.name]
+
+  if node.host.provider
+    node.provider = node.providers[node.host.provider]
+  end
+
+  node.attributes.tapp
 end
 
 # This meta-act schedules all the other acts.
@@ -28,7 +36,7 @@ act 'configure-ips' do
     #
     # This means that you have to wait for the reboot, then re-cobble.
     # Hopefully this process is idempotent!
-    template("/etc/network/interfaces", :src => 'linode-interfaces.erb').changed? && (
+    template("/etc/network/interfaces", :src => 'linode-interfaces.erb', :vars => {:host => node.host}).changed? && (
       sh("reboot", :action => :execute) # XXX careful!
       throw :halt
     )

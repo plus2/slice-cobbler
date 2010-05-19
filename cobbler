@@ -136,7 +136,7 @@ class Cobbler < Thor
     scp config_file, json_file
 
 
-    ssh "cd #{home+'angry_mob'} && #{sudo} /usr/local/bin/ruby bin/mob #{"--dry-run" if options.dry_run} --nodename #{server.nodename} " \
+    ssh "cd #{home+'angry_mob'} && #{sudo} /usr/local/bin/ruby bin/mob #{"--dry-run" if options.dry_run} --nodename #{nodename} " \
     "--mob #{home+'common_mob'} --mob #{home+'cobble_mob'} --json-file #{json_file} --act #{act}"
   end
 
@@ -253,8 +253,8 @@ To fix, either
   * setup #{root+'config.json'}
       "
     end
-    @config = AngryHash[ Yajl::Parser.parse( config_file.read ) ].tapp
-    @server = @config.servers[nodename]
+    @config = AngryHash[ Yajl::Parser.parse( config_file.read ) ].tapp(:config)
+    @server = @config.servers[nodename.tapp(:nodename)].tapp(:server)
   end
 
   def config_file

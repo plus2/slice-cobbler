@@ -4,14 +4,28 @@
     "api_token": "",
     "user": ""
   },
-  "provider": {
-              "name": "linode"
-            },
+  "providers": {
+    "linode": {
+    }
+  },
   "servers": {
     "newt": {
       "ip": "192.168.0.13",
       "admin_user": "root",
       "admin_home": "/root"
+    },
+
+    "eg_linode": {
+      "provider": "linode",
+      "admin_user": "root",
+      "admin_home": "/root",
+      "ip": "...",
+      "private_ip": "...",
+      "network": {
+        "public": {"netmask": "255.255.255.0", "gateway": "..."},
+        "private": {"netmask": "255.255.128.0"}
+      }
     }
+
   }
 }
